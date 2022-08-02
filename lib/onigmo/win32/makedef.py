@@ -43,12 +43,12 @@ for filename in header_files:
             m = rx1.match(line)
             if not m:
                 continue
-            s = m.group(1)
+            s = m[1]
             if s[-1] != ';':
-                s += ' ' + next(f)
+                s += f' {next(f)}'
             m2 = rx2.search(s)
-            if m2 and (not m2.group(1) in exclude_symbols):
-                symbols.add(m2.group(1))
+            if m2 and m2[1] not in exclude_symbols:
+                symbols.add(m2[1])
 
 print('EXPORTS')
 for s in sorted(symbols):

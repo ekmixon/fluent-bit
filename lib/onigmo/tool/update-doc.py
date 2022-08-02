@@ -17,7 +17,7 @@ def print_list(arr, title):
     print()
     print("*", title)
     for i in arr:
-        print("    " + i)
+        print(f"    {i}")
 
 def output_header():
     d = datetime.date.today()
@@ -36,15 +36,15 @@ def output_header():
     return set(posix_brackets) | set(specials)
 
 def output_categories():
-    categories = set(["LC", "Cn"])
+    categories = {"LC", "Cn"}
     pattern = re.compile('^.*?;.*?;(..);')
     with open(ucddir + os.sep + 'UnicodeData.txt', 'r') as f:
         for line in f:
             res = pattern.match(line)
             if not res:
                 continue
-            categories.add(res.group(1))
-            categories.add(res.group(1)[0]) # Major category
+            categories.add(res[1])
+            categories.add(res[1][0])
     print_list(sorted(categories), "Major and General Categories")
     return categories
 
@@ -53,10 +53,8 @@ def output_scripts(filename, title, add=[]):
     pattern = re.compile('^.*?; (\w+) # ')
     with open(filename, 'r') as f:
         for line in f:
-            res = pattern.match(line)
-            if not res:
-                continue
-            scripts.add(res.group(1))
+            if res := pattern.match(line):
+                scripts.add(res[1])
     print_list(sorted(scripts), title)
     return scripts
 
@@ -68,33 +66,32 @@ def output_aliases(scripts):
             res = pattern.match(line)
             if not res:
                 continue
-            if (res.group(2) in scripts) and (res.group(1) not in scripts):
-                aliases.add(res.group(1))
+            if res[2] in scripts and res[1] not in scripts:
+                aliases.add(res[1])
     print_list(sorted(aliases), "PropertyAliases")
     return aliases
 
 def output_valuealiases(scripts):
-    scripts |= set(["cntrl", "digit", "punct"]) # exclude them
-    aliases = list()
-    aliases_sc = list()
+    scripts |= {"cntrl", "digit", "punct"}
+    aliases = []
+    aliases_sc = []
     pattern = re.compile('^(gc|sc) ; (\w+) *; (\w+)(?: *; (\w+))?')
     with open(ucddir + os.sep + 'PropertyValueAliases.txt', 'r') as f:
         for line in f:
             res = pattern.match(line)
             if not res:
                 continue
-            if (res.group(1) == "gc"):
-                if res.group(2) in scripts:
-                    if res.group(3) not in scripts:
-                        aliases.append(res.group(3))
-                    if res.group(4) and (res.group(4) not in scripts):
-                        aliases.append(res.group(4))
-            else:
-                if res.group(3) in scripts:
-                    if res.group(2) not in scripts:
-                        aliases_sc.append(res.group(2))
-                    if res.group(4) and (res.group(4) not in scripts):
-                        aliases_sc.append(res.group(4))
+            if res[1] == "gc":
+                if res[2] in scripts:
+                    if res[3] not in scripts:
+                        aliases.append(res[3])
+                    if res[4] and res[4] not in scripts:
+                        aliases.append(res[4])
+            elif res[3] in scripts:
+                if res[2] not in scripts:
+                    aliases_sc.append(res[2])
+                if res[4] and res[4] not in scripts:
+                    aliases_sc.append(res[4])
 
     print_list(aliases, "PropertyValueAliases (General_Category)")
     print_list(aliases_sc, "PropertyValueAliases (Script)")
@@ -105,22 +102,18 @@ def output_ages():
     pattern = re.compile('^[\dA-F.]+ *; ([\d.]+)')
     with open(ucddir + os.sep + 'DerivedAge.txt', 'r') as f:
         for line in f:
-            res = pattern.match(line)
-            if not res:
-                continue
-            ages.add("Age=" + res.group(1))
+            if res := pattern.match(line):
+                ages.add("Age=" + res[1])
     print_list(sorted(ages), "DerivedAges")
     return ages
 
 def output_blocks():
-    blocks = list()
+    blocks = []
     pattern = re.compile('^[\dA-F.]+ *; ([-\w ]+)')
     with open(ucddir + os.sep + 'Blocks.txt', 'r') as f:
         for line in f:
-            res = pattern.match(line)
-            if not res:
-                continue
-            blocks.append("In_" + re.sub('\W', '_', res.group(1)))
+            if res := pattern.match(line):
+                blocks.append("In_" + re.sub('\W', '_', res[1]))
     blocks.append("In_No_Block")
     print_list(blocks, "Blocks")
     return set(blocks)

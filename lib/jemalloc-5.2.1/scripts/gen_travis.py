@@ -82,7 +82,7 @@ def format_job(combination):
       'percpu_arena:percpu' in malloc_conf or 'background_thread:true' \
       in malloc_conf):
         return ""
-    if len(malloc_conf) > 0:
+    if malloc_conf:
         configure_flags.append('--with-malloc-conf=' + ",".join(malloc_conf))
 
     # Filter out an unsupported configuration - heap profiling on OS X.
@@ -90,9 +90,8 @@ def format_job(combination):
         return ""
 
     # We get some spurious errors when -Warray-bounds is enabled.
-    env_string = ('{} COMPILER_FLAGS="{}" CONFIGURE_FLAGS="{}" '
-	'EXTRA_CFLAGS="-Werror -Wno-array-bounds"').format(
-        compilers, " ".join(compiler_flags), " ".join(configure_flags))
+    env_string = f'{compilers} COMPILER_FLAGS="{" ".join(compiler_flags)}" CONFIGURE_FLAGS="{" ".join(configure_flags)}" EXTRA_CFLAGS="-Werror -Wno-array-bounds"'
+
 
     job = ""
     job += '    - os: %s\n' % os
@@ -109,16 +108,16 @@ def format_job(combination):
             gcc_multilib_set = True
     return job
 
-include_rows = ""
-for combination in unusual_combinations_to_test:
-    include_rows += format_job(combination)
-
-# Development build
-include_rows += '''\
+include_rows = (
+    "".join(
+        format_job(combination) for combination in unusual_combinations_to_test
+    )
+    + '''\
     # Development build
     - os: linux
       env: CC=gcc CXX=g++ COMPILER_FLAGS="" CONFIGURE_FLAGS="--enable-debug --disable-cache-oblivious --enable-stats --enable-log --enable-prof" EXTRA_CFLAGS="-Werror -Wno-array-bounds"
 '''
+)
 
 # Enable-expermental-smallocx
 include_rows += '''\
@@ -138,12 +137,4 @@ include_rows += '''
             - valgrind
 '''
 
-# To enable valgrind on macosx add:
-#
-#  - os: osx
-#    env: CC=gcc CXX=g++ COMPILER_FLAGS="" CONFIGURE_FLAGS="" EXTRA_CFLAGS="-Werror -Wno-array-bounds" JEMALLOC_TEST_PREFIX="valgrind"
-#    install: brew install valgrind
-#
-# It currently fails due to: https://github.com/jemalloc/jemalloc/issues/1274
-
-print travis_template % include_rows
+include_rows = ""

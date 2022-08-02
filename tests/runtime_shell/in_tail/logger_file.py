@@ -45,7 +45,7 @@ class LoggerManager:
             logger.debug(rnd)
             if self.delay > 0.0:
                 time.sleep(self.delay / 1000.0)
-            i = i + 1
+            i += 1
 
 def signal_handler(sig, frame):
     print("stopping logger")

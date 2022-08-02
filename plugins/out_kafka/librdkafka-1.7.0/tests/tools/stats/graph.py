@@ -69,8 +69,7 @@ if __name__ == '__main__':
             # First read available fields
             avail_cols = list(pd.read_csv(infile, nrows=1))
 
-            cols_to_use = [c for c in avail_cols
-                           if len([x for x in skip if fnmatch(c, x)]) == 0]
+            cols_to_use = [c for c in avail_cols if not [x for x in skip if fnmatch(c, x)]]
 
         df = pd.read_csv(infile,
                          parse_dates=[datecolumn],
@@ -93,7 +92,7 @@ if __name__ == '__main__':
                 for _, dg in grp:
                     print(col, " dg:\n", dg.head())
                     figtitle = f"{title}: {col}"
-                    p = figs.get(figtitle, None)
+                    p = figs.get(figtitle)
                     if p is None:
                         p = figure(title=f"{title}: {col}",
                                    plot_width=args.plot_width,
@@ -143,8 +142,9 @@ if __name__ == '__main__':
     for p in plots:
         p.legend.click_policy = "hide"
 
-    grid = []
-    for i in range(0, len(plots), args.chart_cols):
-        grid.append(plots[i:i+args.chart_cols])
+    grid = [
+        plots[i : i + args.chart_cols]
+        for i in range(0, len(plots), args.chart_cols)
+    ]
 
     pandas_bokeh.plot_grid(grid)

@@ -75,7 +75,7 @@ class Artifact (object):
             self.lpath = os.path.join(arts.dlpath, slpath)
 
         if info is None:
-            self.info = dict()
+            self.info = {}
         else:
             # Assign the map and convert all keys to lower case
             self.info = {k.lower(): v for k, v in info.items()}
@@ -107,7 +107,7 @@ class Artifact (object):
             If the artifact is already downloaded nothing is done. """
         if os.path.isfile(self.lpath) and os.path.getsize(self.lpath) > 0:
             return
-        print('Downloading %s' % self.path)
+        print(f'Downloading {self.path}')
         if dry_run:
             return
         ldir = os.path.dirname(self.lpath)
@@ -120,14 +120,13 @@ class Artifacts (object):
     def __init__(self, match, dlpath):
         super(Artifacts, self).__init__()
         self.match = match
-        self.artifacts = list()
+        self.artifacts = []
         # Download directory (make sure it ends with a path separator)
         if not dlpath.endswith(os.path.sep):
             dlpath = os.path.join(dlpath, '')
         self.dlpath = dlpath
-        if not os.path.isdir(self.dlpath):
-            if not dry_run:
-                os.makedirs(self.dlpath, 0o755)
+        if not os.path.isdir(self.dlpath) and not dry_run:
+            os.makedirs(self.dlpath, 0o755)
 
 
     def collect_single(self, path, req_tag=True):
@@ -149,17 +148,17 @@ class Artifacts (object):
         # matching of project, gitref, etc.
         rinfo = re.findall(r'(?P<tag>[^-]+)-(?P<val>.*?)(?:__|$)', folder)
         if rinfo is None or len(rinfo) == 0:
-            print('Incorrect folder/file name format for %s' % folder)
+            print(f'Incorrect folder/file name format for {folder}')
             return None
 
         info = dict(rinfo)
 
         # Ignore AppVeyor Debug builds
         if info.get('bldtype', '').lower() == 'debug':
-            print('Ignoring debug artifact %s' % folder)
+            print(f'Ignoring debug artifact {folder}')
             return None
 
-        tag = info.get('tag', None)
+        tag = info.get('tag')
         if tag is not None and (len(tag) == 0 or tag.startswith('$(')):
             # AppVeyor doesn't substite $(APPVEYOR_REPO_TAG_NAME)
             # with an empty value when not set, it leaves that token
@@ -167,14 +166,10 @@ class Artifacts (object):
             del info['tag']
 
         # Perform matching
-        unmatched = list()
-        for m,v in self.match.items():
-            if m not in info or info[m] != v:
-                unmatched.append(m)
-
+        unmatched = [m for m, v in self.match.items() if m not in info or info[m] != v]
         # Make sure all matches were satisfied, unless this is a
         # common artifact.
-        if info.get('p', '') != 'common' and len(unmatched) > 0:
+        if info.get('p', '') != 'common' and unmatched:
             # print('%s: %s did not match %s' % (info.get('p', None), folder, unmatched))
             return None
 
@@ -183,7 +178,7 @@ class Artifacts (object):
 
     def collect_s3(self):
         """ Collect and download build-artifacts from S3 based on git reference """
-        print('Collecting artifacts matching %s from S3 bucket %s' % (self.match, s3_bucket))
+        print(f'Collecting artifacts matching {self.match} from S3 bucket {s3_bucket}')
         self.s3 = boto3.resource('s3')
         self.s3_bucket = self.s3.Bucket(s3_bucket)
         self.s3_client = boto3.client('s3')
@@ -226,7 +221,7 @@ class Package (object):
         A Package is a working container for one or more output
         packages for a specific package type (e.g., nuget) """
 
-    def __init__ (self, version, arts, ptype):
+    def __init__(self, version, arts, ptype):
         super(Package, self).__init__()
         self.version = version
         self.arts = arts
@@ -236,7 +231,7 @@ class Package (object):
         # Staging path, filled in later.
         self.stpath = None
         self.kv = {'version': version}
-        self.files = dict()
+        self.files = {}
 
     def add_file (self, file):
         self.files[file] = True
@@ -298,7 +293,7 @@ class NugetPackage (Package):
         if os.path.isdir(self.stpath):
             shutil.rmtree(self.stpath)
 
-    def build (self, buildtype):
+    def build(self, buildtype):
         """ Build single NuGet package for all its artifacts. """
 
         # NuGet removes the prefixing v from the version.
@@ -307,8 +302,7 @@ class NugetPackage (Package):
             vless_version = vless_version[1:]
 
 
-        self.stpath = tempfile.mkdtemp(prefix="out-", suffix="-%s" % buildtype,
-                                       dir=".")
+        self.stpath = tempfile.mkdtemp(prefix="out-", suffix=f"-{buildtype}", dir=".")
 
         self.render('librdkafka.redist.nuspec')
         self.copy_template('librdkafka.redist.targets',
@@ -323,9 +317,10 @@ class NugetPackage (Package):
             if 'bldtype' not in a.info:
                 a.info['bldtype'] = 'release'
 
-            a.info['variant'] = '%s-%s-%s' % (a.info.get('plat'),
-                                              a.info.get('arch'),
-                                              a.info.get('bldtype'))
+            a.info[
+                'variant'
+            ] = f"{a.info.get('plat')}-{a.info.get('arch')}-{a.info.get('bldtype')}"
+
             if 'toolset' not in a.info:
                 a.info['toolset'] = 'v120'
 
@@ -387,13 +382,7 @@ class NugetPackage (Package):
 
             artifact = None
             for a in self.arts.artifacts:
-                found = True
-
-                for attr in attributes:
-                    if a.info[attr] != attributes[attr]:
-                        found = False
-                        break
-
+                found = all(a.info[attr] == attributes[attr] for attr in attributes)
                 if not fnmatch(a.fname, fname_glob):
                     found = False
 
@@ -414,20 +403,23 @@ class NugetPackage (Package):
             try:
                 zfile.ZFile.extract(artifact.lpath, member, outf)
             except KeyError as e:
-                raise Exception('file not found in archive %s: %s. Files in archive are: %s' % (artifact.lpath, e, zfile.ZFile(artifact.lpath).getnames()))
+                raise Exception(
+                    f'file not found in archive {artifact.lpath}: {e}. Files in archive are: {zfile.ZFile(artifact.lpath).getnames()}'
+                )
 
-        print('Tree extracted to %s' % self.stpath)
+
+        print(f'Tree extracted to {self.stpath}')
 
         # After creating a bare-bone nupkg layout containing the artifacts
         # and some spec and props files, call the 'nuget' utility to
         # make a proper nupkg of it (with all the metadata files).
         subprocess.check_call("./nuget.sh pack %s -BasePath '%s' -NonInteractive" %  \
-                              (os.path.join(self.stpath, 'librdkafka.redist.nuspec'),
+                                  (os.path.join(self.stpath, 'librdkafka.redist.nuspec'),
                                self.stpath), shell=True)
 
-        return 'librdkafka.redist.%s.nupkg' % vless_version
+        return f'librdkafka.redist.{vless_version}.nupkg'
 
-    def verify (self, path):
+    def verify(self, path):
         """ Verify package """
         expect = [
             "librdkafka.redist.nuspec",
@@ -460,15 +452,15 @@ class NugetPackage (Package):
             "runtimes/win-x86/native/zlib.dll",
             "runtimes/win-x86/native/libzstd.dll"]
 
-        missing = list()
+        missing = []
         with zfile.ZFile(path, 'r') as zf:
-            print('Verifying %s:' % path)
+            print(f'Verifying {path}:')
 
             # Zipfiles may url-encode filenames, unquote them before matching.
             pkgd = [unquote(x) for x in zf.getnames()]
             missing = [x for x in expect if x not in pkgd]
 
-        if len(missing) > 0:
+        if missing:
             print('Missing files in package %s:\n%s' % (path, '\n'.join(missing)))
             return False
         else:
@@ -489,7 +481,7 @@ class StaticPackage (Package):
         if os.path.isdir(self.stpath):
             shutil.rmtree(self.stpath)
 
-    def build (self, buildtype):
+    def build(self, buildtype):
         """ Build single package for all artifacts. """
 
         self.stpath = tempfile.mkdtemp(prefix="out-", dir=".")
@@ -530,12 +522,10 @@ class StaticPackage (Package):
 
             artifact = None
             for a in self.arts.artifacts:
-                found = True
-
-                for attr in attributes:
-                    if attr not in a.info or a.info[attr] != attributes[attr]:
-                        found = False
-                        break
+                found = not any(
+                    attr not in a.info or a.info[attr] != attributes[attr]
+                    for attr in attributes
+                )
 
                 if not fnmatch(a.fname, fname_glob):
                     found = False
@@ -557,21 +547,25 @@ class StaticPackage (Package):
             try:
                 zfile.ZFile.extract(artifact.lpath, member, outf)
             except KeyError as e:
-                raise Exception('file not found in archive %s: %s. Files in archive are: %s' % (artifact.lpath, e, zfile.ZFile(artifact.lpath).getnames()))
+                raise Exception(
+                    f'file not found in archive {artifact.lpath}: {e}. Files in archive are: {zfile.ZFile(artifact.lpath).getnames()}'
+                )
 
-        print('Tree extracted to %s' % self.stpath)
+
+        print(f'Tree extracted to {self.stpath}')
 
         # After creating a bare-bone layout, create a tarball.
-        outname = "librdkafka-static-bundle-%s.tgz" % self.version
-        print('Writing to %s' % outname)
-        subprocess.check_call("(cd %s && tar cvzf ../%s .)" % \
-                              (self.stpath, outname),
-                              shell=True)
+        outname = f"librdkafka-static-bundle-{self.version}.tgz"
+        print(f'Writing to {outname}')
+        subprocess.check_call(
+            f"(cd {self.stpath} && tar cvzf ../{outname} .)", shell=True
+        )
+
 
         return outname
 
 
-    def verify (self, path):
+    def verify(self, path):
         """ Verify package """
         expect = [
             "./rdkafka.h",
@@ -585,15 +579,15 @@ class StaticPackage (Package):
             "./librdkafka_windows.a",
             "./librdkafka_windows.pc"]
 
-        missing = list()
+        missing = []
         with zfile.ZFile(path, 'r') as zf:
-            print('Verifying %s:' % path)
+            print(f'Verifying {path}:')
 
             # Zipfiles may url-encode filenames, unquote them before matching.
             pkgd = [unquote(x) for x in zf.getnames()]
             missing = [x for x in expect if x not in pkgd]
 
-        if len(missing) > 0:
+        if missing:
             print('Missing files in package %s:\n%s' % (path, '\n'.join(missing)))
             return False
         else:

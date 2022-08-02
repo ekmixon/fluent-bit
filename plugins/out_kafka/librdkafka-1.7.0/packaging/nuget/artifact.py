@@ -44,7 +44,7 @@ class Artifact (object):
             self.lpath = os.path.join(arts.dlpath, slpath)
 
         if info is None:
-            self.info = dict()
+            self.info = {}
         else:
             # Assign the map and convert all keys to lower case
             self.info = {k.lower(): v for k, v in info.items()}
@@ -76,7 +76,7 @@ class Artifact (object):
             If the artifact is already downloaded nothing is done. """
         if os.path.isfile(self.lpath) and os.path.getsize(self.lpath) > 0:
             return
-        print('Downloading %s -> %s' % (self.path, self.lpath))
+        print(f'Downloading {self.path} -> {self.lpath}')
         if dry_run:
             return
         ldir = os.path.dirname(self.lpath)
@@ -89,14 +89,13 @@ class Artifacts (object):
     def __init__(self, match, dlpath):
         super(Artifacts, self).__init__()
         self.match = match
-        self.artifacts = list()
+        self.artifacts = []
         # Download directory (make sure it ends with a path separator)
         if not dlpath.endswith(os.path.sep):
             dlpath = os.path.join(dlpath, '')
         self.dlpath = dlpath
-        if not os.path.isdir(self.dlpath):
-            if not dry_run:
-                os.makedirs(self.dlpath, 0o755)
+        if not os.path.isdir(self.dlpath) and not dry_run:
+            os.makedirs(self.dlpath, 0o755)
 
     def collect_single(self, path, req_tag=True):
         """ Collect single artifact, be it in S3 or locally.
@@ -104,7 +103,7 @@ class Artifacts (object):
         :param: req_tag bool: Require tag to match.
         """
 
-        print('?  %s' % path)
+        print(f'?  {path}')
 
         # For local files, strip download path.
         # Also ignore any parent directories.
@@ -117,17 +116,17 @@ class Artifacts (object):
         # matching of project, gitref, etc.
         rinfo = re.findall(r'(?P<tag>[^-]+)-(?P<val>.*?)__', folder)
         if rinfo is None or len(rinfo) == 0:
-            print('Incorrect folder/file name format for %s' % folder)
+            print(f'Incorrect folder/file name format for {folder}')
             return None
 
         info = dict(rinfo)
 
         # Ignore AppVeyor Debug builds
         if info.get('bldtype', '').lower() == 'debug':
-            print('Ignoring debug artifact %s' % folder)
+            print(f'Ignoring debug artifact {folder}')
             return None
 
-        tag = info.get('tag', None)
+        tag = info.get('tag')
         if tag is not None and (len(tag) == 0 or tag.startswith('$(')):
             # AppVeyor doesn't substite $(APPVEYOR_REPO_TAG_NAME)
             # with an empty value when not set, it leaves that token
@@ -135,16 +134,12 @@ class Artifacts (object):
             del info['tag']
 
         # Match tag or sha to gitref
-        unmatched = list()
-        for m,v in self.match.items():
-            if m not in info or info[m] != v:
-                unmatched.append(m)
-
+        unmatched = [m for m, v in self.match.items() if m not in info or info[m] != v]
         # Make sure all matches were satisfied, unless this is a
         # common artifact.
-        if info.get('p', '') != 'common' and len(unmatched) > 0:
+        if info.get('p', '') != 'common' and unmatched:
             print(info)
-            print('%s: %s did not match %s' % (info.get('p', None), folder, unmatched))
+            print(f"{info.get('p', None)}: {folder} did not match {unmatched}")
             return None
 
         return Artifact(self, path, info)
@@ -152,7 +147,7 @@ class Artifacts (object):
 
     def collect_s3(self):
         """ Collect and download build-artifacts from S3 based on git reference """
-        print('Collecting artifacts matching %s from S3 bucket %s' % (self.match, s3_bucket))
+        print(f'Collecting artifacts matching {self.match} from S3 bucket {s3_bucket}')
         self.s3 = boto3.resource('s3')
         self.s3_bucket = self.s3.Bucket(s3_bucket)
         self.s3_client = boto3.client('s3')

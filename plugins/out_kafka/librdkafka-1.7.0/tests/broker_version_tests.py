@@ -22,7 +22,7 @@ import argparse
 import json
 import tempfile
 
-def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
+def test_it(version, deploy=True, conf={}, rdkconf={}, tests=None,
              interact=False, debug=False, scenario="default"):
     """
     @brief Create, deploy and start a Kafka cluster using Kafka \p version
@@ -52,14 +52,17 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
 
     else:
         rdkafka.start()
-        print('# librdkafka regression tests started, logs in %s' % rdkafka.root_path())
+        print(f'# librdkafka regression tests started, logs in {rdkafka.root_path()}')
         rdkafka.wait_stopped(timeout=60*30)
 
         report = rdkafka.report()
         report['root_path'] = rdkafka.root_path()
 
         if report.get('tests_failed', 0) > 0 and interact:
-            print('# Connect to cluster with bootstrap.servers %s' % cluster.bootstrap_servers())
+            print(
+                f'# Connect to cluster with bootstrap.servers {cluster.bootstrap_servers()}'
+            )
+
             print('# Exiting the shell will bring down the cluster. Good luck.')
             subprocess.call('bash --rcfile <(cat ~/.bashrc; echo \'PS1="[TRIVUP:%s@%s] \\u@\\h:\w$ "\')' % (cluster.name, version), env=rdkafka.env, shell=True, executable='/bin/bash')
 
@@ -69,7 +72,7 @@ def test_it (version, deploy=True, conf={}, rdkconf={}, tests=None,
     return report
 
 
-def handle_report (report, version, suite):
+def handle_report(report, version, suite):
     """ Parse test report and return tuple (Passed(bool), Reason(str)) """
     test_cnt = report.get('tests_run', 0)
 
@@ -78,21 +81,25 @@ def handle_report (report, version, suite):
 
     passed = report.get('tests_passed', 0)
     failed = report.get('tests_failed', 0)
-    if 'all' in suite.get('expect_fail', []) or version in suite.get('expect_fail', []):
-        expect_fail = True
-    else:
-        expect_fail = False
+    expect_fail = 'all' in suite.get(
+        'expect_fail', []
+    ) or version in suite.get('expect_fail', [])
 
     if expect_fail:
-        if failed == test_cnt:
-            return (True, 'All %d/%d tests failed as expected' % (failed, test_cnt))
-        else:
-            return (False, '%d/%d tests failed: expected all to fail' % (failed, test_cnt))
+        return (
+            (True, 'All %d/%d tests failed as expected' % (failed, test_cnt))
+            if failed == test_cnt
+            else (
+                False,
+                '%d/%d tests failed: expected all to fail'
+                % (failed, test_cnt),
+            )
+        )
+
+    if failed > 0:
+        return (False, '%d/%d tests passed: expected all to pass' % (passed, test_cnt))
     else:
-        if failed > 0:
-            return (False, '%d/%d tests passed: expected all to pass' % (passed, test_cnt))
-        else:
-            return (True, 'All %d/%d tests passed as expected' % (passed, test_cnt))
+        return (True, 'All %d/%d tests passed as expected' % (passed, test_cnt))
 
 
 
@@ -131,14 +138,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    conf = dict()
-    rdkconf = dict()
+    conf = {}
+    rdkconf = {}
 
-    if args.conf is not None:
-        args.conf = json.loads(args.conf)
-    else:
-        args.conf = {}
-
+    args.conf = json.loads(args.conf) if args.conf is not None else {}
     if args.port is not None:
         args.conf['port_base'] = int(args.port)
     if args.kafka_path is not None:
@@ -154,9 +157,9 @@ if __name__ == '__main__':
         args.conf['test_mode'] = 'bash'
     args.conf['broker_cnt'] = args.broker_cnt
 
-    conf.update(args.conf)
+    conf |= args.conf
     if args.rdkconf is not None:
-        rdkconf.update(json.loads(args.rdkconf))
+        rdkconf |= json.loads(args.rdkconf)
 
     conf.update(read_scenario_conf(args.scenario))
 
@@ -168,10 +171,7 @@ if __name__ == '__main__':
         tests = None
 
     # Test version + suite matrix
-    if 'versions' in conf:
-        versions = conf.get('versions')
-    else:
-        versions = args.versions
+    versions = conf.get('versions', args.versions)
     suites = [{'name': 'standard'}]
 
     pass_cnt = 0
@@ -184,11 +184,13 @@ if __name__ == '__main__':
             _rdkconf.update(suite.get('rdkconf', {}))
 
             if 'version' not in suite:
-                suite['version'] = dict()
+                suite['version'] = {}
 
             # Run tests
-            print('#### Version %s, suite %s, scenario %s: STARTING' %
-                  (version, suite['name'], args.scenario))
+            print(
+                f"#### Version {version}, suite {suite['name']}, scenario {args.scenario}: STARTING"
+            )
+
             report = test_it(version, tests=tests, conf=_conf, rdkconf=_rdkconf,
                              interact=args.interact, debug=args.debug,
                              scenario=args.scenario)
@@ -212,9 +214,13 @@ if __name__ == '__main__':
                 fail_cnt += 1
 
                 # Emit hopefully relevant parts of the log on failure
-                subprocess.call("grep --color=always -B100 -A10 FAIL %s" % (os.path.join(report['root_path'], 'stderr.log')), shell=True)
+                subprocess.call(
+                    f"grep --color=always -B100 -A10 FAIL {os.path.join(report['root_path'], 'stderr.log')}",
+                    shell=True,
+                )
 
-            print('#### Test output: %s/stderr.log' % (report['root_path']))
+
+            print(f"#### Test output: {report['root_path']}/stderr.log")
 
             suite['version'][version] = report
 
@@ -236,7 +242,7 @@ if __name__ == '__main__':
 
     print('\n\n\n')
     print_report_summary(full_report)
-    print('#### Full test suites report in: %s' % test_suite_report_file)
+    print(f'#### Full test suites report in: {test_suite_report_file}')
 
     if pass_cnt == 0 or fail_cnt > 0:
         sys.exit(1)

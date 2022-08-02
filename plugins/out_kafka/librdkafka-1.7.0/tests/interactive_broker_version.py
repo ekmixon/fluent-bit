@@ -23,11 +23,11 @@ import sys
 import argparse
 import json
 
-def version_as_number (version):
+def version_as_number(version):
     if version == 'trunk':
         return sys.maxint
     tokens = version.split('.')
-    return float('%s.%s' % (tokens[0], tokens[1]))
+    return float(f'{tokens[0]}.{tokens[1]}')
 
 def test_version (version, cmd=None, deploy=True, conf={}, debug=False, exec_cnt=1,
                   root_path='tmp', broker_cnt=3, scenario='default'):
